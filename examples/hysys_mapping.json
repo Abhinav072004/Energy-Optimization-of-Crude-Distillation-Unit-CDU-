@@ -1,0 +1,19 @@
+{
+  "confirmed_solved": false,
+  "streams": [
+    {
+      "name": "Crude preheat segment",
+      "kind": "cold",
+      "inlet": "REPLACE_WITH_CRUDE_PREHEAT_INLET",
+      "outlet": "REPLACE_WITH_CRUDE_PREHEAT_OUTLET",
+      "sensible_only": false
+    },
+    {
+      "name": "Hot product cooling segment",
+      "kind": "hot",
+      "inlet": "REPLACE_WITH_HOT_PRODUCT_INLET",
+      "outlet": "REPLACE_WITH_HOT_PRODUCT_OUTLET",
+      "sensible_only": false
+    }
+  ]
+}

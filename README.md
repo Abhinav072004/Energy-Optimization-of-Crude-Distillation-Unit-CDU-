@@ -3,7 +3,7 @@
 [![Aspen HYSYS](https://img.shields.io/badge/Aspen_HYSYS-v11%2B-blue.svg)](https://www.aspentech.com/)
 [![Aspen Energy Analyzer](https://img.shields.io/badge/Aspen-Energy_Analyzer-green.svg)](https://www.aspentech.com/)
 [![Focus](https://img.shields.io/badge/Focus-Pinch_Analysis_%26_Control-orange.svg)]()
-[![Fuel Gas Savings](https://img.shields.io/badge/Fuel_Gas_Savings-12%25-brightgreen.svg)]()
+[![Python](https://img.shields.io/badge/Portable_analysis-Python_3.10%2B-blue.svg)]()
 
 > Full-scale dynamic modeling and thermal optimization of a multi-stage Crude Distillation Unit (CDU) using **Aspen HYSYS** and **Aspen Energy Analyzer**.
 
@@ -11,7 +11,7 @@
 
 ## 📌 Executive Summary
 
-This project models and dynamically simulates a crude oil distillation plant processing 99,000 BPD of blended Mexican crude (Olmec, Isthmus, Maya) using the Peng-Robinson fluid package. Integrating **Pinch Analysis** into the crude preheat train maximized thermal recovery between hot product streams and incoming crude, achieving a **12% reduction in fired heater fuel gas consumption** while maintaining dynamic column stability under feed quality disturbances.
+The project documentation describes a crude oil distillation plant processing 99,000 BPD of blended Mexican crude (Olmec, Isthmus, Maya) using the Peng–Robinson fluid package, with a reported 12% fuel reduction target/result. The supplied template and report do not independently reproduce that figure or demonstrate dynamic stability. The tools below calculate targets from explicit stream data rather than assuming a fixed percentage saving.
 
 ---
 
@@ -103,67 +103,91 @@ To handle real-time feed quality and flow variations (Olmec, Isthmus, and Maya c
 
 ---
 
-## 🛠️ Automation & Analysis Script (`cdu_pinch_analysis.py`)
+## 🛠️ New automation and analysis features
 
-```python
-import win32com.client
-import sys
+- **Read-only Aspen HYSYS export:** attach to an open Windows case and export configured inlet/outlet pairs with explicit unit conversions, mass-flow consistency checks, and provenance metadata.
+- **Actual pinch targeting:** shifted-temperature heat cascade calculates minimum heating/cooling, maximum heat recovery, and internal pinch temperatures from your data.
+- **ΔTmin sensitivity:** compare utility demand at several temperature approaches before considering exchanger design.
+- **Economics and emissions:** estimate potential fuel, annual cost, direct CO₂, and simple payback against a supplied heater baseline.
+- **Standalone visual reports:** grand composite curve, utility sensitivity, stream tables, and assumptions in an offline HTML file, plus machine-readable JSON.
 
-def connect_hysys():
-    """Connect to active Aspen HYSYS Automation API."""
-    try:
-        hysys = win32com.client.Dispatch("HYSYS.Application")
-        print("[+] Successfully connected to Aspen HYSYS.")
-        return hysys
-    except Exception as e:
-        print(f"[-] Error connecting to HYSYS: {e}")
-        sys.exit(1)
+### 1. Connect a real Aspen case (Windows)
 
-def run_cdu_pinch_analysis():
-    hysys = connect_hysys()
-    case = hysys.ActiveDocument
+Use a Python version compatible with your HYSYS COM installation. Install the optional Windows dependency:
 
-    if case is None:
-        print("[-] No active HYSYS simulation case found.")
-        return
-
-    print(f"[+] Active Case: {case.Title.Value}")
-
-    flowsheet = case.Flowsheet
-    furnace_f10 = flowsheet.Operations.Item("F-10")
-
-    q_baseline = furnace_f10.Cell("Heat Duty").Value
-    print(f"[*] Baseline Fired Heater Duty (F-10): {q_baseline:.2f} MMBtu/h")
-
-    streams = flowsheet.MaterialStreams
-    hot_streams = ["EA-11", "EA-12", "EA-13", "EA-14", "Kerosene", "Diesel", "AGO", "Residue"]
-
-    print("\n--- Hot Stream Thermal Extraction ---")
-    for name in hot_streams:
-        try:
-            st = streams.Item(name)
-            t_in = st.Temperature.Value
-            flow = st.MolarFlow.Value
-            print(f"Stream: {name:10s} | T_in: {t_in:6.2f} C | Flow: {flow:8.2f} kgmole/h")
-        except Exception:
-            pass
-
-    q_optimized = q_baseline * 0.88
-    fuel_savings = ((q_baseline - q_optimized) / q_baseline) * 100
-
-    print("\n--- Energy Conservation Target Verification ---")
-    print(f"[*] Target Fired Heater Duty (Pinch Retrofitted): {q_optimized:.2f} MMBtu/h")
-    print(f"[+] Projected Fuel Gas Savings: {fuel_savings:.1f}%")
-
-if __name__ == "__main__":
-    run_cdu_pinch_analysis()
+```powershell
+py -m pip install -r requirements-hysys.txt
 ```
 
----
+Open a **copy** of the supplied `.tpl` in a compatible licensed Aspen installation, or open your validated case. The repository does not contain the previously referenced `CDU_Simulation_Master.hsc`; template compatibility must be checked in Aspen. Solve and review the case yourself.
 
-## 📂 Execution Steps
+Copy `examples/hysys_mapping.json` to your own mapping file. Replace placeholder stream names with exact names from the active flowsheet and confirm the solved/sensible-stream declarations only after reviewing the case. Then run:
 
-1. Open `CDU_Simulation_Master.hsc` in **Aspen HYSYS**.
-2. Export stream thermal properties into **Aspen Energy Analyzer** and establish the heat exchanger network with ΔTmin = 10°C.
-3. Run `python cdu_pinch_analysis.py` to confirm furnace duty reduction and thermal targets via COM automation.
-4. Activate HYSYS Dynamics Assistant, set integrator step size to 0.5 s, and verify system stability.
+```powershell
+py hysys_export.py --map my_hysys_mapping.json --output outputs/hysys_streams.csv --metadata outputs/hysys_export.json
+py cdu_pinch_analysis.py outputs/hysys_streams.csv --dt-min 10 --sweep 5,10,15,20,30
+```
+
+Open `outputs/report.html` in a browser. See [the HYSYS automation guide](docs/HYSYS_AUTOMATION.md) for mapping, property reads, limitations, and troubleshooting. Live HYSYS integration requires Windows, Aspen, and a license; the portable analysis requires none of these.
+
+### 2. Try the portable analysis now
+
+Python **3.10+**, standard library only. No package installation or server is needed:
+
+```bash
+python3 cdu_pinch_analysis.py examples/streams.csv --dt-min 20
+```
+
+The supplied CSV is **synthetic demonstration data**, not an export of the supplied case. Its hand-checkable targets at ΔTmin = 20°C are **29 kW hot utility**, **60 kW cold utility**, and **355 kW heat recovery**. The internal pinch is **100°C hot / 80°C cold**.
+
+Outputs default to `outputs/analysis.json` and `outputs/report.html`. Use `--json` and `--html` to choose paths. These output files are ignored by Git.
+
+For an illustrative economic scenario:
+
+```bash
+python3 cdu_pinch_analysis.py examples/streams.csv --dt-min 20 --baseline-duty 35 --heater-efficiency 0.85 --hours 8000 --fuel-price 40 --co2-factor 56.1 --retrofit-cost 1000
+```
+
+This **synthetic** example yields 17.14% potential fuel reduction and about 2,258.82 currency units/year in savings. It is not a verification of the original 12% claim.
+
+### Input data and units
+
+Use this exact CSV schema (column order may vary):
+
+```csv
+name,kind,supply_c,target_c,cp_kw_per_k
+Hot product,hot,180,40,2
+Crude preheat,cold,20,140,2
+```
+
+`cp_kw_per_k` is **heat-capacity flow rate**, not specific heat: mass flow (kg/s) × specific heat (kJ/kg/K). Hot streams cool; cold streams heat. Names must be unique, numbers finite, CP positive, and at least one stream of each type supplied. ΔTmin must be positive. Invalid inputs fail with a clear error rather than producing a report. Add `--data-note` to record measurement source and case conditions.
+
+HYSYS exports use an effective constant CP = mass flow × enthalpy difference / temperature difference. Use sensible-only segments with approximately constant properties; segment variable-property streams before analysis. Do not include both an overall stream and its component segments, or count both sides of the same heat requirement as separate process demands.
+
+### Calculation basis
+
+Hot temperatures shift down by ΔTmin/2 and cold temperatures up by ΔTmin/2. Each shifted interval releases `(ΣCP_hot − ΣCP_cold) × ΔT`. The deepest heat-cascade deficit determines minimum hot utility; the corrected bottom residual determines minimum cold utility. Internal zero residuals identify pinch locations; endpoint zeros indicate utility thresholds. Recovery equals total cold duty minus hot utility, also equal to total hot duty minus cold utility.
+
+The hot utility target is a **system-level** minimum. Compare it with a measured useful heater duty only when both cover the same stream/system boundary. Baseline duty is heat delivered to the process, not fuel-input power. With constant efficiency:
+
+```text
+Fuel savings (kW) = (baseline useful duty − targeted useful duty) / efficiency
+Annual fuel savings (MWh) = fuel savings (kW) × operating hours / 1000
+Annual cost savings = annual fuel savings (MWh) × price per MWh fuel
+Annual CO₂ savings (tonnes) = annual fuel savings (MWh) × 3.6 × kg CO₂/GJ / 1000
+Simple payback (years) = retrofit capital cost / positive annual cost savings
+```
+
+A target above baseline retains negative savings. Payback is unavailable without investment or positive annual savings. Fuel price and investment use the same chosen currency. Defaults (85% efficiency, 8,000 hours/year, 40 currency/MWh, 56.1 kg CO₂/GJ fuel) are editable screening assumptions, not measured case properties. Emissions exclude upstream lifecycle effects; payback excludes financing, maintenance, taxes, and cooling-utility costs.
+
+These calculations do not size or optimize an exchanger network, account for forbidden matches or finite utility temperatures, solve a column, tune PID controllers, or verify dynamic stability. Smaller ΔTmin can reduce utility demand while increasing exchanger area; the sweep does not claim an economic optimum.
+
+### Validation
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Tests cover hand-calculated cascade targets, thermal balances, sensitivity, malformed input, economic conversions, HTML escaping, and simulated COM exports. COM test doubles verify exporter logic and requested units; they do not validate a live Aspen installation. For live acceptance, compare exported properties and duties with Aspen's stream workbook before using the report for engineering decisions.
+
+The original `.tpl` and PDF remain unchanged. Aspen Energy Analyzer and HYSYS Dynamics remain the tools for full network and dynamic simulation validation.

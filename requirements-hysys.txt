@@ -1,0 +1,2 @@
+# Optional: required only for HYSYS COM export on Windows.
+pywin32>=306; sys_platform == "win32"

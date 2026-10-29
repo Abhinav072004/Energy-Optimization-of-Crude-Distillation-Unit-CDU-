@@ -1,0 +1,5 @@
+name,kind,supply_c,target_c,cp_kw_per_k
+H1,hot,180,40,2
+H2,hot,150,60,1.5
+C1,cold,20,140,2
+C2,cold,80,160,1.8
